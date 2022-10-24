@@ -8,6 +8,7 @@ const OneSwapViewWrap = artifacts.require('OneSwapViewWrap');
 const OneSwap = artifacts.require('OneSwap');
 const OneSwapWrap = artifacts.require('OneSwapWrap');
 
+const UNISWAP_V2_USDC = new BN('10000000', 16);
 const DISABLE_ALL = new BN('20000000', 16).add(new BN('40000000', 16));
 const UNISWAP_ALL = new BN('100000000000', 16);
 const CURVE_ALL = new BN('200000000000', 16);
@@ -27,20 +28,20 @@ contract("OneSwap", ([alice, bob, carol, david, erin]) => {
     });
 
     describe('OneSwap', async () => {
-        it('should work with Uniswap ETH => USDC', async () => {
+        it('should work with Uniswap ETH => COMP', async () => {
             const res = await oneSwap.getExpectedReturn(
                 '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE', // ETH
-                '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+                '0xc00e94Cb662C3520282E6f5717214004A7f26888', // COMP
                 '1000000000000000000', // 1.0
                 10, // parts
-                DISABLE_ALL.add(UNISWAP_ALL) // enable only Uniswap
+                0//DISABLE_ALL.add(UNISWAP_V2_USDC) // enable only Uniswap V2
             );
 
             console.log('Swap: 1 ETH');
-            console.log('returnAmount:', res.returnAmount.toString() / 1e6 + ' USDC');
-            // console.log('distribution:', res.distribution.map(a => a.toString()));
+            console.log('returnAmount:', res.returnAmount.toString() / 1e18 + ' COMP');
+            console.log('distribution:', res.distribution.map(a => a.toString()));
             // console.log('raw:', res.returnAmount.toString());
-            expect(res.returnAmount).to.be.bignumber.above('390000000');
+            //expect(res.returnAmount).to.be.bignumber.above('390000000');
         });
     });
 });

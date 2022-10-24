@@ -14,8 +14,8 @@ contract OneSwapViewWrap is
     }
 
     function getExpectedReturn(
-        IERC20 fromToken,
-        IERC20 destToken,
+        IERC20 srcToken,
+        IERC20 dstToken,
         uint256 amount,
         uint256 parts,
         uint256 flags
@@ -28,8 +28,8 @@ contract OneSwapViewWrap is
         )
     {
         (returnAmount, , distribution) = getExpectedReturnWithGas(
-            fromToken,
-            destToken,
+            srcToken,
+            dstToken,
             amount,
             parts,
             flags,
@@ -38,12 +38,12 @@ contract OneSwapViewWrap is
     }
 
     function getExpectedReturnWithGas(
-        IERC20 fromToken,
-        IERC20 destToken,
+        IERC20 srcToken,
+        IERC20 dstToken,
         uint256 amount,
         uint256 parts,
         uint256 flags,
-        uint256 destTokenEthPriceTimesGasPrice
+        uint256 dstTokenEthPriceTimesGasPrice
     )
         public
         view
@@ -53,27 +53,27 @@ contract OneSwapViewWrap is
             uint256[] memory distribution
         )
     {
-        if (fromToken == destToken) {
+        if (srcToken == dstToken) {
             return (amount, 0, new uint256[](DEXES_COUNT));
         }
 
         return super.getExpectedReturnWithGas(
-            fromToken,
-            destToken,
+            srcToken,
+            dstToken,
             amount,
             parts,
             flags,
-            destTokenEthPriceTimesGasPrice
+            dstTokenEthPriceTimesGasPrice
         );
     }
 
     function _getExpectedReturnRespectingGasFloor(
-        IERC20 fromToken,
-        IERC20 destToken,
+        IERC20 srcToken,
+        IERC20 dstToken,
         uint256 amount,
         uint256 parts,
         uint256 flags, // See constants in IOneSwap.sol
-        uint256 destTokenEthPriceTimesGasPrice
+        uint256 dstTokenEthPriceTimesGasPrice
     )
         internal
         view
@@ -84,12 +84,12 @@ contract OneSwapViewWrap is
         )
     {
         return oneSwapView.getExpectedReturnWithGas(
-            fromToken,
-            destToken,
+            srcToken,
+            dstToken,
             amount,
             parts,
             flags,
-            destTokenEthPriceTimesGasPrice
+            dstTokenEthPriceTimesGasPrice
         );
     }
 }
@@ -111,8 +111,8 @@ contract OneSwapWrap is
     }
 
     function getExpectedReturn(
-        IERC20 fromToken,
-        IERC20 destToken,
+        IERC20 srcToken,
+        IERC20 dstToken,
         uint256 amount,
         uint256 parts,
         uint256 flags
@@ -125,8 +125,8 @@ contract OneSwapWrap is
         )
     {
         (returnAmount, , distribution) = getExpectedReturnWithGas(
-            fromToken,
-            destToken,
+            srcToken,
+            dstToken,
             amount,
             parts,
             flags,
@@ -135,12 +135,12 @@ contract OneSwapWrap is
     }
 
     function getExpectedReturnWithGas(
-        IERC20 fromToken,
-        IERC20 destToken,
+        IERC20 srcToken,
+        IERC20 dstToken,
         uint256 amount,
         uint256 parts,
         uint256 flags,
-        uint256 destTokenEthPriceTimesGasPrice
+        uint256 dstTokenEthPriceTimesGasPrice
     )
         public
         view
@@ -151,12 +151,12 @@ contract OneSwapWrap is
         )
     {
         return oneSwapView.getExpectedReturnWithGas(
-            fromToken,
-            destToken,
+            srcToken,
+            dstToken,
             amount,
             parts,
             flags,
-            destTokenEthPriceTimesGasPrice
+            dstTokenEthPriceTimesGasPrice
         );
     }
 
@@ -165,7 +165,7 @@ contract OneSwapWrap is
         uint256 amount,
         uint256[] memory parts,
         uint256[] memory flags,
-        uint256[] memory destTokenEthPriceTimesGasPrices
+        uint256[] memory dstTokenEthPriceTimesGasPrices
     )
         public
         view
@@ -196,7 +196,7 @@ contract OneSwapWrap is
                 (i == 1) ? amount : returnAmounts[i - 2],
                 parts[i - 1],
                 flags[i - 1],
-                destTokenEthPriceTimesGasPrices[i - 1]
+                dstTokenEthPriceTimesGasPrices[i - 1]
             );
             estimateGasAmount = estimateGasAmount.add(amount);
 
@@ -210,21 +210,21 @@ contract OneSwapWrap is
     }
 
     function swap(
-        IERC20 fromToken,
-        IERC20 destToken,
+        IERC20 srcToken,
+        IERC20 dstToken,
         uint256 amount,
         uint256 minReturn,
         uint256[] memory distribution,
         uint256 flags
     ) public payable returns (uint256 returnAmount) {
-        fromToken.universalTransferFrom(msg.sender, address(this), amount);
-        uint256 confirmed = fromToken.universalBalanceOf(address(this));
-        _swap(fromToken, destToken, confirmed, distribution, flags);
+        srcToken.universalTransferFrom(msg.sender, address(this), amount);
+        uint256 confirmed = srcToken.universalBalanceOf(address(this));
+        _swap(srcToken, dstToken, confirmed, distribution, flags);
 
-        returnAmount = destToken.universalBalanceOf(address(this));
+        returnAmount = dstToken.universalBalanceOf(address(this));
         require(returnAmount >= minReturn, "OneSwap: actual return amount is less than minReturn");
-        destToken.universalTransfer(msg.sender, returnAmount);
-        fromToken.universalTransfer(msg.sender, fromToken.universalBalanceOf(address(this)));
+        dstToken.universalTransfer(msg.sender, returnAmount);
+        srcToken.universalTransfer(msg.sender, srcToken.universalBalanceOf(address(this)));
     }
 
     function swapMulti(
@@ -263,16 +263,16 @@ contract OneSwapWrap is
     }
 
     function _swapFloor(
-        IERC20 fromToken,
-        IERC20 destToken,
+        IERC20 srcToken,
+        IERC20 dstToken,
         uint256 amount,
         uint256[] memory distribution,
         uint256 flags
     ) internal {
-        fromToken.universalApprove(address(oneSwap), amount);
-        oneSwap.swap.value(fromToken.isETH() ? amount : 0)(
-            fromToken,
-            destToken,
+        srcToken.universalApprove(address(oneSwap), amount);
+        oneSwap.swap.value(srcToken.isETH() ? amount : 0)(
+            srcToken,
+            dstToken,
             amount,
             0,
             distribution,

@@ -4,21 +4,18 @@ pragma solidity ^0.5.0;
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 
 contract IOneSwapConsts {
-    uint256 internal constant FLAG_DISABLE_UNISWAP = 0x01;
-    uint256 internal constant FLAG_DISABLE_STABLESWAP = 0x02;
     uint256 internal constant FLAG_DISABLE_UNISWAP_V2 = 0x2000000;
+    uint256 internal constant FLAG_DISABLE_UNISWAP_V2_USDC = 0x10000000;
     uint256 internal constant FLAG_DISABLE_ALL_SPLIT_SOURCES = 0x20000000;
     uint256 internal constant FLAG_DISABLE_ALL_WRAP_SOURCES = 0x40000000;
-    uint256 internal constant FLAG_DISABLE_UNISWAP_ALL = 0x100000000000;
-    uint256 internal constant FLAG_DISABLE_CURVE_ALL = 0x200000000000;
     uint256 internal constant FLAG_DISABLE_UNISWAP_V2_ALL = 0x400000000000;
     uint256 internal constant FLAG_DISABLE_SPLIT_RECALCULATION = 0x800000000000;
 }
 
 contract IOneSwap is IOneSwapConsts {
     function getExpectedReturn(
-        IERC20 fromToken,
-        IERC20 destToken,
+        IERC20 srcToken,
+        IERC20 dstToken,
         uint256 amount,
         uint256 parts,
         uint256 flags // See constants in IOneSwap.sol
@@ -31,12 +28,12 @@ contract IOneSwap is IOneSwapConsts {
         );
 
     function getExpectedReturnWithGas(
-        IERC20 fromToken,
-        IERC20 destToken,
+        IERC20 srcToken,
+        IERC20 dstToken,
         uint256 amount,
         uint256 parts,
         uint256 flags, // See constants in IOneSwap.sol
-        uint256 destTokenEthPriceTimesGasPrice
+        uint256 dstTokenEthPriceTimesGasPrice
     )
         public
         view
@@ -47,8 +44,8 @@ contract IOneSwap is IOneSwapConsts {
         );
 
     function swap(
-        IERC20 fromToken,
-        IERC20 destToken,
+        IERC20 srcToken,
+        IERC20 dstToken,
         uint256 amount,
         uint256 minReturn,
         uint256[] memory distribution,
@@ -65,7 +62,7 @@ contract IOneSwapMulti is IOneSwap {
         uint256 amount,
         uint256[] memory parts,
         uint256[] memory flags,
-        uint256[] memory destTokenEthPriceTimesGasPrices
+        uint256[] memory dstTokenEthPriceTimesGasPrices
     )
         public
         view
