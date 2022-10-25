@@ -3,10 +3,10 @@ pragma solidity ^0.5.0;
 
 import '@openzeppelin/contracts/math/SafeMath.sol';
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
-import './interface/IUniswapFactory.sol';
+import './interface/ICurve.sol';
 import './interface/IUniswapV2Factory.sol';
-import './interface/IWETH.sol';
 import './IOneSwap.sol';
+import './interface/IWETH.sol';
 import './UniversalERC20.sol';
 import 'hardhat/console.sol';
 
@@ -56,13 +56,20 @@ contract OneSwapRoot is IOneSwapView {
     using UniversalERC20 for IWETH;
     using UniswapV2ExchangeLib for IUniswapV2Exchange;
 
-    uint256 constant internal DEXES_COUNT = 1;
+    uint256 constant internal DEXES_COUNT = 2;
     IERC20 constant internal ETH_ADDRESS = IERC20(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE);
     IERC20 constant internal ZERO_ADDRESS = IERC20(0);
 
     IWETH constant internal weth = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+    IERC20 constant internal dai = IERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
+    IERC20 constant internal usdc = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+    IERC20 constant internal usdt = IERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
+    IERC20 constant internal tusd = IERC20(0x0000000000085d4780B73119b644AE5ecd22b376);
 
+    ICurve constant internal curveY = ICurve(0x45F783CCE6B7FF23B2ab2D70e416cdb7D6055f51);
     IUniswapV2Factory constant internal uniswapV2 = IUniswapV2Factory(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
+    ICurveCalculator constant internal curveCalculator = ICurveCalculator(0xc1DB00a8E5Ef7bfa476395cdbcc98235477cDE4E);
+    ICurveRegistry constant internal curveRegistry = ICurveRegistry(0x7002B727Ef8F5571Cb5F9D70D13DBEEb4dFAe9d1);
 
     int256 internal constant VERY_NEGATIVE_VALUE = -1e72;
 
@@ -314,7 +321,8 @@ contract OneSwapView is IOneSwapView, OneSwapRoot {
         Args memory args
     ) internal view returns (uint256 returnAmount, uint256 estimateGasAmount) {
         bool[DEXES_COUNT] memory exact = [
-            true   // "Uniswap V2",
+            true,   // "Curve Y"
+            true    // "Uniswap V2",
         ];
 
         for (uint i = 0; i < DEXES_COUNT; i++) {
@@ -343,6 +351,7 @@ contract OneSwapView is IOneSwapView, OneSwapRoot {
     {
         bool invert = flags.check(FLAG_DISABLE_ALL_SPLIT_SOURCES);
         return [
+            invert != flags.check(FLAG_DISABLE_CURVE_ALL | FLAG_DISABLE_CURVE_Y)      ? _calculateNoReturn : calculateCurveY,
             invert != flags.check(FLAG_DISABLE_UNISWAP_V2_ALL | FLAG_DISABLE_UNISWAP_V2)      ? _calculateNoReturn : calculateUniswapV2
         ];
     }
@@ -352,6 +361,139 @@ contract OneSwapView is IOneSwapView, OneSwapRoot {
     struct Balances {
         uint256 src;
         uint256 dst;
+    }
+
+    function _getCurvePoolInfo(
+        ICurve curve,
+        bool haveUnderlying
+    ) internal view returns (
+        uint256[8] memory balances,
+        uint256[8] memory precisions,
+        uint256[8] memory rates,
+        uint256 amp,
+        uint256 fee
+    ) {
+        uint256[8] memory underlying_balances;
+        uint256[8] memory decimals;
+        uint256[8] memory underlying_decimals;
+
+        (
+            balances,
+            underlying_balances,
+            decimals,
+            underlying_decimals,
+            /*address lp_token*/,
+            amp,
+            fee
+        ) = curveRegistry.get_pool_info(address(curve));
+
+        for (uint k = 0; k < 8 && balances[k] > 0; k++) {
+            precisions[k] = 10 ** (18 - (haveUnderlying ? underlying_decimals : decimals)[k]);
+            if (haveUnderlying) {
+                rates[k] = underlying_balances[k].mul(1e18).div(balances[k]);
+            } else {
+                rates[k] = 1e18;
+            }
+        }
+    }
+
+    function _calculateCurveSelector(
+        IERC20 srcToken,
+        IERC20 dstToken,
+        uint256 amount,
+        uint256 parts,
+        ICurve curve,
+        bool haveUnderlying,
+        IERC20[] memory tokens
+    ) internal view returns (uint256[] memory rets) {
+        rets = new uint256[](parts);
+
+        int128 i = 0;
+        int128 j = 0;
+        for (uint t = 0; t < tokens.length; t++) {
+            if (srcToken == tokens[t]) {
+                i = int128(t + 1);
+            }
+            if (dstToken == tokens[t]) {
+                j = int128(t + 1);
+            }
+        }
+
+        if (i == 0 || j == 0) {
+            return rets;
+        }
+
+        bytes memory data = abi.encodePacked(
+            uint256(haveUnderlying ? 1 : 0),
+            uint256(i - 1),
+            uint256(j - 1),
+            _linearInterpolation100(amount, parts)
+        );
+
+        (
+            uint256[8] memory balances,
+            uint256[8] memory precisions,
+            uint256[8] memory rates,
+            uint256 amp,
+            uint256 fee
+        ) = _getCurvePoolInfo(curve, haveUnderlying);
+
+        bool success;
+        (success, data) = address(curveCalculator).staticcall(
+            abi.encodePacked(
+		abi.encodeWithSelector(
+	            curveCalculator.get_dy.selector,
+	            tokens.length,
+	            balances,
+	            amp,
+	            fee,
+	            rates,
+	            precisions
+            	),
+            	data
+	    )
+        );
+
+        if (!success || data.length == 0) {
+            return rets;
+        }
+
+        uint256[100] memory dy = abi.decode(data, (uint256[100]));
+        for (uint t = 0; t < parts; t++) {
+            rets[t] = dy[t];
+        }
+    }
+
+    function _linearInterpolation100(
+        uint256 value,
+        uint256 parts
+    ) internal pure returns (uint256[100] memory rets) {
+        for (uint i = 0; i < parts; i++) {
+            rets[i] = value.mul(i + 1).div(parts);
+        }
+    }
+
+    function calculateCurveY(
+        IERC20 srcToken,
+        IERC20 dstToken,
+        uint256 amount,
+        uint256 parts,
+        uint256 /*flags*/
+    ) internal view returns (uint256[] memory rets, uint256 gas) {
+        IERC20[] memory tokens = new IERC20[](4);
+        tokens[0] = dai;
+        tokens[1] = usdc;
+        tokens[2] = usdt;
+        tokens[3] = tusd;
+        return (_calculateCurveSelector(
+            srcToken,
+            dstToken,
+            amount,
+            parts,
+            curveY,
+            true,
+            tokens
+        ), 1_400_000);
     }
 
     function _calculateUniswapFormula(uint256 fromBalance, uint256 toBalance, uint256 amount) internal pure returns (uint256) {
@@ -516,6 +658,7 @@ contract OneSwap is IOneSwap, OneSwapRoot {
         }
 
         function(IERC20,IERC20,uint256,uint256)[DEXES_COUNT] memory reserves = [
+            _swapOnCurveY,
             _swapOnUniswapV2
         ];
 
@@ -562,6 +705,28 @@ contract OneSwap is IOneSwap, OneSwapRoot {
     }
 
     // Swap helpers
+
+    function _swapOnCurveY(
+        IERC20 srcToken,
+        IERC20 dstToken,
+        uint256 amount,
+        uint256 /*flags*/
+    ) internal {
+        int128 i = (srcToken == dai ? 1 : 0) +
+            (srcToken == usdc ? 2 : 0) +
+            (srcToken == usdt ? 3 : 0) +
+            (srcToken == tusd ? 4 : 0);
+        int128 j = (dstToken == dai ? 1 : 0) +
+            (dstToken == usdc ? 2 : 0) +
+            (dstToken == usdt ? 3 : 0) +
+            (dstToken == tusd ? 4 : 0);
+        if (i == 0 || j == 0) {
+            return;
+        }
+
+        srcToken.universalApprove(address(curveY), amount);
+        curveY.exchange_underlying(i - 1, j - 1, amount, 0);
+    }
 
     function _swapOnUniswapV2Internal(
         IERC20 srcToken,
