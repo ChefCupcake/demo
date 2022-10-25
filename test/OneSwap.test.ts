@@ -8,9 +8,7 @@ const OneSwapViewWrap = artifacts.require('OneSwapViewWrap');
 const OneSwap = artifacts.require('OneSwap');
 const OneSwapWrap = artifacts.require('OneSwapWrap');
 
-const UNISWAP_V2_USDC = new BN('10000000', 16);
 const DISABLE_ALL = new BN('20000000', 16).add(new BN('40000000', 16));
-const UNISWAP_ALL = new BN('100000000000', 16);
 const CURVE_ALL = new BN('200000000000', 16);
 const UNISWAP_V2_ALL = new BN('400000000000', 16);
 
@@ -34,7 +32,7 @@ contract("OneSwap", ([alice, bob, carol, david, erin]) => {
                 '0xc00e94Cb662C3520282E6f5717214004A7f26888', // COMP
                 '1000000000000000000', // 1.0
                 10, // parts
-                0//DISABLE_ALL.add(UNISWAP_V2_USDC) // enable only Uniswap V2
+                DISABLE_ALL.add(UNISWAP_V2_ALL) // enable only Uniswap V2
             );
 
             console.log('Swap: 1 ETH');

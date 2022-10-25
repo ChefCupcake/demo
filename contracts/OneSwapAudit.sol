@@ -219,7 +219,7 @@ contract OneSwapAudit is IOneSwap, Ownable {
         uint256 amount,
         uint256 minReturn,
         uint256[] memory distribution,
-        uint256 flags, // See contants in IOneSplit.sol
+        uint256 flags, // See constants in IOneSplit.sol
         address referral,
         uint256 feePercent
     ) public payable returns(uint256) {

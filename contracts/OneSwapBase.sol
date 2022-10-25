@@ -56,16 +56,11 @@ contract OneSwapRoot is IOneSwapView {
     using UniversalERC20 for IWETH;
     using UniswapV2ExchangeLib for IUniswapV2Exchange;
 
-    uint256 constant internal DEXES_COUNT = 2;
+    uint256 constant internal DEXES_COUNT = 1;
     IERC20 constant internal ETH_ADDRESS = IERC20(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE);
     IERC20 constant internal ZERO_ADDRESS = IERC20(0);
 
     IWETH constant internal weth = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-    IERC20 constant internal dai = IERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
-    IERC20 constant internal usdc = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
-    IERC20 constant internal usdt = IERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
-    IERC20 constant internal busd = IERC20(0x4Fabb145d64652a948d72533023f6E7A623C7C53);
-    IERC20 constant internal wbtc = IERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
 
     IUniswapV2Factory constant internal uniswapV2 = IUniswapV2Factory(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
 
@@ -319,8 +314,7 @@ contract OneSwapView is IOneSwapView, OneSwapRoot {
         Args memory args
     ) internal view returns (uint256 returnAmount, uint256 estimateGasAmount) {
         bool[DEXES_COUNT] memory exact = [
-            true,   // "Uniswap V2 (USDC)",
-            true    // "Uniswap V2",
+            true   // "Uniswap V2",
         ];
 
         for (uint i = 0; i < DEXES_COUNT; i++) {
@@ -349,8 +343,7 @@ contract OneSwapView is IOneSwapView, OneSwapRoot {
     {
         bool invert = flags.check(FLAG_DISABLE_ALL_SPLIT_SOURCES);
         return [
-            invert != flags.check(FLAG_DISABLE_UNISWAP_V2_ALL | FLAG_DISABLE_UNISWAP_V2)      ? _calculateNoReturn : calculateUniswapV2USDC,
-            invert != flags.check(FLAG_DISABLE_UNISWAP_V2_ALL | FLAG_DISABLE_UNISWAP_V2_USDC) ? _calculateNoReturn : calculateUniswapV2
+            invert != flags.check(FLAG_DISABLE_UNISWAP_V2_ALL | FLAG_DISABLE_UNISWAP_V2)      ? _calculateNoReturn : calculateUniswapV2
         ];
     }
 
@@ -385,27 +378,6 @@ contract OneSwapView is IOneSwapView, OneSwapRoot {
         );
     }
 
-    function calculateUniswapV2USDC(
-        IERC20 srcToken,
-        IERC20 dstToken,
-        uint256 amount,
-        uint256 parts,
-        uint256 flags
-    ) internal view returns (uint256[] memory rets, uint256 gas) {
-        if (srcToken == usdc || dstToken == usdc) {
-            return (new uint256[](parts), 0);
-        }
-
-        return _calculateUniswapV2OverMidToken(
-            srcToken,
-            usdc,
-            dstToken,
-            amount,
-            parts,
-            flags
-        );
-    }
-
     function _calculateUniswapV2(
         IERC20 srcToken,
         IERC20 dstToken,
@@ -425,23 +397,6 @@ contract OneSwapView is IOneSwapView, OneSwapRoot {
             }
             return (rets, 50_000);
         }
-    }
-
-    function _calculateUniswapV2OverMidToken(
-        IERC20 srcToken,
-        IERC20 midToken,
-        IERC20 dstToken,
-        uint256 amount,
-        uint256 parts,
-        uint256 flags
-    ) internal view returns (uint256[] memory rets, uint256 gas) {
-        rets = _linearInterpolation(amount, parts);
-
-        uint256 gas1;
-        uint256 gas2;
-        (rets, gas1) = _calculateUniswapV2(srcToken, midToken, rets, flags);
-        (rets, gas2) = _calculateUniswapV2(midToken, dstToken, rets, flags);
-        return (rets, gas1+gas2);
     }
 
     function _calculateNoReturn(
@@ -561,7 +516,6 @@ contract OneSwap is IOneSwap, OneSwapRoot {
         }
 
         function(IERC20,IERC20,uint256,uint256)[DEXES_COUNT] memory reserves = [
-            _swapOnUniswapV2USDC,
             _swapOnUniswapV2
         ];
 
@@ -574,6 +528,7 @@ contract OneSwap is IOneSwap, OneSwapRoot {
                 parts = parts.add(distribution[i]);
                 lastNonZeroIndex = i;
             }
+
         }
 
         if (parts == 0) {
@@ -643,26 +598,6 @@ contract OneSwap is IOneSwap, OneSwapRoot {
         }
     }
 
-    function _swapOnUniswapV2OverMid(
-        IERC20 srcToken,
-        IERC20 midToken,
-        IERC20 dstToken,
-        uint256 amount,
-        uint256 flags
-    ) internal {
-        _swapOnUniswapV2Internal(
-            midToken,
-            dstToken,
-            _swapOnUniswapV2Internal(
-                srcToken,
-                midToken,
-                amount,
-                flags
-            ),
-            flags
-        );
-    }
-
     function _swapOnUniswapV2(
         IERC20 srcToken,
         IERC20 dstToken,
@@ -671,21 +606,6 @@ contract OneSwap is IOneSwap, OneSwapRoot {
     ) internal {
         _swapOnUniswapV2Internal(
             srcToken,
-            dstToken,
-            amount,
-            flags
-        );
-    }
-
-    function _swapOnUniswapV2USDC(
-        IERC20 srcToken,
-        IERC20 dstToken,
-        uint256 amount,
-        uint256 flags
-    ) internal {
-        _swapOnUniswapV2OverMid(
-            srcToken,
-            usdc,
             dstToken,
             amount,
             flags
