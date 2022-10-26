@@ -8,18 +8,6 @@ import './interface/IUniswapV2Exchange.sol';
 import './IOneSwap.sol';
 import './UniversalERC20.sol';
 
-contract IFreeFromUpTo is IERC20 {
-    function freeFromUpTo(address from, uint256 value) external returns (uint256 freed);
-}
-
-interface IReferralGasSponsor {
-    function makeGasDiscount(
-        uint256 gasSpent,
-        uint256 returnAmount,
-        bytes calldata msgSenderCalldata
-    ) external;
-}
-
 library Array {
     function first(IERC20[] memory arr) internal pure returns (IERC20) {
         return arr[0];
@@ -36,9 +24,6 @@ library Array {
 //    since it could only call `transferFrom()` with first argument equal to msg.sender
 // 2. It is safe to call `swap()` with reliable `minReturn` argument,
 //    if returning amount will not reach `minReturn` value whole swap will be reverted.
-// 3. Additionally CHI tokens could be burned from caller in case of FLAG_ENABLE_CHI_BURN (0x10000000000)
-//    presented in `flags` or from transaction origin in case of FLAG_ENABLE_CHI_BURN_BY_ORIGIN (0x4000000000000000)
-//    presented in `flags`. Burned amount would refund up to 43% of gas fees.
 //
 contract OneSwapAudit is IOneSwap, Ownable {
     using SafeMath for uint256;
@@ -46,7 +31,6 @@ contract OneSwapAudit is IOneSwap, Ownable {
     using Array for IERC20[];
 
     IWETH constant internal weth = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-    IFreeFromUpTo public constant chi = IFreeFromUpTo(0x0000000000004946c0e9F43F4Dee607b0eF1fA1c);
 
     IOneSwapMulti public oneSwapImpl;
 
@@ -59,9 +43,7 @@ contract OneSwapAudit is IOneSwap, Ownable {
         uint256 dstTokenAmount,
         uint256 minReturn,
         uint256[] distribution,
-        uint256[] flags,
-        address referral,
-        uint256 feePercent
+        uint256[] flags
     );
 
     constructor(IOneSwapMulti impl) public {
@@ -190,38 +172,7 @@ contract OneSwapAudit is IOneSwap, Ownable {
         uint256 amount,
         uint256 minReturn,
         uint256[] memory distribution,
-        uint256 flags // See contants in IOneSwap.sol
-    ) public payable returns(uint256) {
-        return swapWithReferral(
-            srcToken,
-            dstToken,
-            amount,
-            minReturn,
-            distribution,
-            flags,
-            address(0),
-            0
-        );
-    }
-
-    /// @notice Swap `amount` of `srcToken` to `dstToken`
-    /// param srcToken (IERC20) Address of token or `address(0)` for Ether
-    /// param dstToken (IERC20) Address of token or `address(0)` for Ether
-    /// @param amount (uint256) Amount for `srcToken`
-    /// @param minReturn (uint256) Minimum expected return, else revert
-    /// @param distribution (uint256[]) Array of weights for volume distribution returned by `getExpectedReturn`
-    /// @param flags (uint256) Flags for enabling and disabling some features, default 0
-    /// @param referral (address) Address of referral
-    /// @param feePercent (uint256) Fees percents normalized to 1e18, limited to 0.03e18 (3%)
-    function swapWithReferral(
-        IERC20 srcToken,
-        IERC20 dstToken,
-        uint256 amount,
-        uint256 minReturn,
-        uint256[] memory distribution,
-        uint256 flags, // See constants in IOneSplit.sol
-        address referral,
-        uint256 feePercent
+        uint256 flags // See constants in IOneSwap.sol
     ) public payable returns(uint256) {
         IERC20[] memory tokens = new IERC20[](2);
         tokens[0] = srcToken;
@@ -230,14 +181,12 @@ contract OneSwapAudit is IOneSwap, Ownable {
         uint256[] memory flagsArray = new uint256[](1);
         flagsArray[0] = flags;
 
-        swapWithReferralMulti(
+        return swapMulti(
             tokens,
             amount,
             minReturn,
             distribution,
-            flagsArray,
-            referral,
-            feePercent
+            flagsArray
         );
     }
 
@@ -253,39 +202,10 @@ contract OneSwapAudit is IOneSwap, Ownable {
         uint256 minReturn,
         uint256[] memory distribution,
         uint256[] memory flags
-    ) public payable returns(uint256) {
-        swapWithReferralMulti(
-            tokens,
-            amount,
-            minReturn,
-            distribution,
-            flags,
-            address(0),
-            0
-        );
-    }
-
-    /// @notice Swap `amount` of first element of `tokens` to the latest element of `dstToken`
-    /// @param tokens (IERC20[]) Addresses of token or `address(0)` for Ether
-    /// @param amount (uint256) Amount for `srcToken`
-    /// @param minReturn (uint256) Minimum expected return, else revert
-    /// @param distribution (uint256[]) Array of weights for volume distribution returned by `getExpectedReturn`
-    /// @param flags (uint256[]) Flags for enabling and disabling some features, default 0
-    /// @param referral (address) Address of referral
-    /// @param feePercent (uint256) Fees percents normalized to 1e18, limited to 0.03e18 (3%)
-    function swapWithReferralMulti(
-        IERC20[] memory tokens,
-        uint256 amount,
-        uint256 minReturn,
-        uint256[] memory distribution,
-        uint256[] memory flags,
-        address referral,
-        uint256 feePercent
     ) public payable returns(uint256 returnAmount) {
         require(tokens.length >= 2 && amount > 0, "OneSwap: swap makes no sense");
         require(flags.length == tokens.length - 1, "OneSwap: flags array length is invalid");
         require((msg.value != 0) == tokens.first().isETH(), "OneSwap: msg.value should be used only for ETH swap");
-        require(feePercent <= 0.03e18, "OneSwap: feePercent out of range");
 
         Balances memory beforeBalances = _getFirstAndLastBalances(tokens, true);
 
@@ -297,7 +217,7 @@ contract OneSwapAudit is IOneSwap, Ownable {
             );
         }
         tokens.first().universalTransferFromSenderToThis(amount);
-        uint256 confirmed = tokens.first().universalBalanceOf(address(this)).sub(beforeBalances.ofsrcToken);
+        uint256 confirmed = tokens.first().universalBalanceOf(address(this)).sub(beforeBalances.ofSrcToken);
 
         // Swap
         tokens.first().universalApprove(address(oneSwapImpl), confirmed);
@@ -312,10 +232,8 @@ contract OneSwapAudit is IOneSwap, Ownable {
         Balances memory afterBalances = _getFirstAndLastBalances(tokens, false);
 
         // Return
-        returnAmount = afterBalances.ofdstToken.sub(beforeBalances.ofdstToken);
+        returnAmount = afterBalances.ofDstToken.sub(beforeBalances.ofDstToken);
         require(returnAmount >= minReturn, "OneSwap: actual return amount is less than minReturn");
-        tokens.last().universalTransfer(referral, returnAmount.mul(feePercent).div(1e18));
-        tokens.last().universalTransfer(msg.sender, returnAmount.sub(returnAmount.mul(feePercent).div(1e18)));
 
         emit Swapped(
             tokens.first(),
@@ -324,14 +242,12 @@ contract OneSwapAudit is IOneSwap, Ownable {
             returnAmount,
             minReturn,
             distribution,
-            flags,
-            referral,
-            feePercent
+            flags
         );
 
         // Return remainder
-        if (afterBalances.ofsrcToken > beforeBalances.ofsrcToken) {
-            tokens.first().universalTransfer(msg.sender, afterBalances.ofsrcToken.sub(beforeBalances.ofsrcToken));
+        if (afterBalances.ofSrcToken > beforeBalances.ofSrcToken) {
+            tokens.first().universalTransfer(msg.sender, afterBalances.ofSrcToken.sub(beforeBalances.ofSrcToken));
         }
     }
 
@@ -340,14 +256,14 @@ contract OneSwapAudit is IOneSwap, Ownable {
     }
 
     struct Balances {
-        uint256 ofsrcToken;
-        uint256 ofdstToken;
+        uint256 ofSrcToken;
+        uint256 ofDstToken;
     }
 
     function _getFirstAndLastBalances(IERC20[] memory tokens, bool subValue) internal view returns(Balances memory) {
         return Balances({
-            ofsrcToken: tokens.first().universalBalanceOf(address(this)).sub(subValue ? msg.value : 0),
-            ofdstToken: tokens.last().universalBalanceOf(address(this))
+            ofSrcToken: tokens.first().universalBalanceOf(address(this)).sub(subValue ? msg.value : 0),
+            ofDstToken: tokens.last().universalBalanceOf(address(this))
         });
     }
 }

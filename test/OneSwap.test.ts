@@ -32,7 +32,7 @@ contract("OneSwap", ([alice, bob, carol, david, erin]) => {
                 '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
                 '1000000000000000000000000', // 1,000,000.00
                 10, // parts
-                DISABLE_ALL.add(CURVE_ALL) // enable only CURVE
+                0//DISABLE_ALL.add(CURVE_ALL) // enable only CURVE
             );
 
             console.log('Swap: 1,000,000 DAI');
