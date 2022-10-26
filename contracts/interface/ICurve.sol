@@ -13,6 +13,18 @@ interface ICurve {
 
     // solium-disable-next-line mixedcase
     function exchange(int128 i, int128 j, uint256 dx, uint256 minDy) external;
+
+    // solium-disable-next-line mixedcase
+    function coins(int128 i) external view returns (address);
+
+    // solium-disable-next-line mixedcase
+    function balances(int128 i) external view returns (uint256);
+
+    // solium-disable-next-line mixedcase
+    function A() external view returns (uint256);
+
+    // solium-disable-next-line mixedcase
+    function fee() external view returns (uint256);
 }
 
 contract ICurveRegistry {

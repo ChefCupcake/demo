@@ -351,8 +351,8 @@ contract OneSwapView is IOneSwapView, OneSwapRoot {
     {
         bool invert = flags.check(FLAG_DISABLE_ALL_SPLIT_SOURCES);
         return [
-            invert != flags.check(FLAG_DISABLE_CURVE_ALL | FLAG_DISABLE_CURVE_Y)      ? _calculateNoReturn : calculateCurveY,
-            invert != flags.check(FLAG_DISABLE_PANCAKESWAP_V2_ALL | FLAG_DISABLE_PANCAKESWAP_V2)      ? _calculateNoReturn : calculatePancakeswapV2
+            invert != flags.check(FLAG_DISABLE_CURVE_ALL | FLAG_DISABLE_CURVE_Y)                        ? _calculateNoReturn : calculateCurveY,
+            invert != flags.check(FLAG_DISABLE_PANCAKESWAP_V2_ALL | FLAG_DISABLE_PANCAKESWAP_V2)        ? _calculateNoReturn : calculatePancakeswapV2
         ];
     }
 
@@ -364,8 +364,7 @@ contract OneSwapView is IOneSwapView, OneSwapRoot {
     }
 
     function _getCurvePoolInfo(
-        ICurve curve,
-        bool haveUnderlying
+        ICurve curve
     ) internal view returns (
         uint256[8] memory balances,
         uint256[8] memory precisions,
@@ -373,27 +372,32 @@ contract OneSwapView is IOneSwapView, OneSwapRoot {
         uint256 amp,
         uint256 fee
     ) {
-        uint256[8] memory underlying_balances;
         uint256[8] memory decimals;
-        uint256[8] memory underlying_decimals;
 
-        (
-            balances,
-            underlying_balances,
-            decimals,
-            underlying_decimals,
-            /*address lp_token*/,
-            amp,
-            fee
-        ) = curveRegistry.get_pool_info(address(curve));
+        for (int8 i = 0; i < 8; i++) {
+            int128 a = 0; //int128(i);//0
+            address _coin = curve.coins(a);
+            uint j = uint(i);
+            balances[j] = IERC20(_coin).balanceOf(address(curve));
+
+            decimals[j] = 18;
+        }
+        amp = curve.A();
+        fee = curve.fee();
+
+//        (
+//            balances,
+//            /*underlying_balances*/,
+//            decimals,
+//            /*underlying_decimals*/,
+//            /*address lp_token*/,
+//            amp,
+//            fee
+//        ) = curveRegistry.get_pool_info(address(curve));
 
         for (uint k = 0; k < 8 && balances[k] > 0; k++) {
-            precisions[k] = 10 ** (18 - (haveUnderlying ? underlying_decimals : decimals)[k]);
-            if (haveUnderlying) {
-                rates[k] = underlying_balances[k].mul(1e18).div(balances[k]);
-            } else {
-                rates[k] = 1e18;
-            }
+            precisions[k] = 10 ** (18 - decimals[k]);
+            rates[k] = 1e18;
         }
     }
 
@@ -436,7 +440,7 @@ contract OneSwapView is IOneSwapView, OneSwapRoot {
             uint256[8] memory rates,
             uint256 amp,
             uint256 fee
-        ) = _getCurvePoolInfo(curve, haveUnderlying);
+        ) = _getCurvePoolInfo(curve);
 
         bool success;
         (success, data) = address(curveCalculator).staticcall(
@@ -483,8 +487,6 @@ contract OneSwapView is IOneSwapView, OneSwapRoot {
         IERC20[] memory tokens = new IERC20[](4);
         tokens[0] = dai;
         tokens[1] = usdc;
-        tokens[2] = usdt;
-        tokens[3] = tusd;
         return (_calculateCurveSelector(
             srcToken,
             dstToken,
@@ -725,7 +727,7 @@ contract OneSwap is IOneSwap, OneSwapRoot {
         }
 
         srcToken.universalApprove(address(curveY), amount);
-        curveY.exchange_underlying(i - 1, j - 1, amount, 0);
+        curveY.exchange(i - 1, j - 1, amount, 0);
     }
 
     function _swapOnPancakeswapV2Internal(
