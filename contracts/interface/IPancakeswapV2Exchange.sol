@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.5.0;
 
 import '@openzeppelin/contracts/math/Math.sol';
@@ -6,20 +6,20 @@ import '@openzeppelin/contracts/math/SafeMath.sol';
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import '../UniversalERC20.sol';
 
-interface IUniswapV2Exchange {
+interface IPancakeswapV2Exchange {
     function getReserves() external view returns (uint112 _reserve0, uint112 _reserve1, uint32 _blockTimestampLast);
     function swap(uint amount0Out, uint amount1Out, address to, bytes calldata data) external;
     function skim(address to) external;
     function sync() external;
 }
 
-library UniswapV2ExchangeLib {
+library PancakeswapV2ExchangeLib {
     using Math for uint256;
     using SafeMath for uint256;
     using UniversalERC20 for IERC20;
 
     function getReturn(
-        IUniswapV2Exchange exchange,
+        IPancakeswapV2Exchange exchange,
         IERC20 srcToken,
         IERC20 dstToken,
         uint amountIn

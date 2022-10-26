@@ -1,10 +1,10 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.5.0;
 
 import '@openzeppelin/contracts/math/Math.sol';
 import '@openzeppelin/contracts/ownership/Ownable.sol';
 import './interface/IWETH.sol';
-import './interface/IUniswapV2Exchange.sol';
+import './interface/IPancakeswapV2Exchange.sol';
 import './IOneSwap.sol';
 import './UniversalERC20.sol';
 

@@ -1,10 +1,10 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.5.0;
 
 import '@openzeppelin/contracts/math/SafeMath.sol';
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import './interface/ICurve.sol';
-import './interface/IUniswapV2Factory.sol';
+import './interface/IPancakeswapV2Factory.sol';
 import './IOneSwap.sol';
 import './interface/IWETH.sol';
 import './UniversalERC20.sol';
@@ -54,7 +54,7 @@ contract OneSwapRoot is IOneSwapView {
 
     using UniversalERC20 for IERC20;
     using UniversalERC20 for IWETH;
-    using UniswapV2ExchangeLib for IUniswapV2Exchange;
+    using PancakeswapV2ExchangeLib for IPancakeswapV2Exchange;
 
     uint256 constant internal DEXES_COUNT = 2;
     IERC20 constant internal ETH_ADDRESS = IERC20(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE);
@@ -67,7 +67,7 @@ contract OneSwapRoot is IOneSwapView {
     IERC20 constant internal tusd = IERC20(0x0000000000085d4780B73119b644AE5ecd22b376);
 
     ICurve constant internal curveY = ICurve(0x45F783CCE6B7FF23B2ab2D70e416cdb7D6055f51);
-    IUniswapV2Factory constant internal uniswapV2 = IUniswapV2Factory(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
+    IPancakeswapV2Factory constant internal pancakeswapV2 = IPancakeswapV2Factory(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
     ICurveCalculator constant internal curveCalculator = ICurveCalculator(0xc1DB00a8E5Ef7bfa476395cdbcc98235477cDE4E);
     ICurveRegistry constant internal curveRegistry = ICurveRegistry(0x7002B727Ef8F5571Cb5F9D70D13DBEEb4dFAe9d1);
 
@@ -321,8 +321,8 @@ contract OneSwapView is IOneSwapView, OneSwapRoot {
         Args memory args
     ) internal view returns (uint256 returnAmount, uint256 estimateGasAmount) {
         bool[DEXES_COUNT] memory exact = [
-            true,   // "Curve Y"
-            true    // "Uniswap V2",
+            true,   // "Stable Swap"
+            true    // "Pancakeswap V2",
         ];
 
         for (uint i = 0; i < DEXES_COUNT; i++) {
@@ -352,7 +352,7 @@ contract OneSwapView is IOneSwapView, OneSwapRoot {
         bool invert = flags.check(FLAG_DISABLE_ALL_SPLIT_SOURCES);
         return [
             invert != flags.check(FLAG_DISABLE_CURVE_ALL | FLAG_DISABLE_CURVE_Y)      ? _calculateNoReturn : calculateCurveY,
-            invert != flags.check(FLAG_DISABLE_UNISWAP_V2_ALL | FLAG_DISABLE_UNISWAP_V2)      ? _calculateNoReturn : calculateUniswapV2
+            invert != flags.check(FLAG_DISABLE_PANCAKESWAP_V2_ALL | FLAG_DISABLE_PANCAKESWAP_V2)      ? _calculateNoReturn : calculatePancakeswapV2
         ];
     }
 
@@ -496,7 +496,7 @@ contract OneSwapView is IOneSwapView, OneSwapRoot {
         ), 1_400_000);
     }
 
-    function _calculateUniswapFormula(uint256 fromBalance, uint256 toBalance, uint256 amount) internal pure returns (uint256) {
+    function _calculatePancakeswapFormula(uint256 fromBalance, uint256 toBalance, uint256 amount) internal pure returns (uint256) {
         if (amount == 0) {
             return 0;
         }
@@ -505,14 +505,14 @@ contract OneSwapView is IOneSwapView, OneSwapRoot {
         );
     }
 
-    function calculateUniswapV2(
+    function calculatePancakeswapV2(
         IERC20 srcToken,
         IERC20 dstToken,
         uint256 amount,
         uint256 parts,
         uint256 flags
     ) internal view returns (uint256[] memory rets, uint256 gas) {
-        return _calculateUniswapV2(
+        return _calculatePancakeswapV2(
             srcToken,
             dstToken,
             _linearInterpolation(amount, parts),
@@ -520,7 +520,7 @@ contract OneSwapView is IOneSwapView, OneSwapRoot {
         );
     }
 
-    function _calculateUniswapV2(
+    function _calculatePancakeswapV2(
         IERC20 srcToken,
         IERC20 dstToken,
         uint256[] memory amounts,
@@ -530,12 +530,12 @@ contract OneSwapView is IOneSwapView, OneSwapRoot {
 
         IERC20 srcTokenReal = srcToken.isETH() ? weth : srcToken;
         IERC20 dstTokenReal = dstToken.isETH() ? weth : dstToken;
-        IUniswapV2Exchange exchange = uniswapV2.getPair(srcTokenReal, dstTokenReal);
-        if (exchange != IUniswapV2Exchange(0)) {
+        IPancakeswapV2Exchange exchange = pancakeswapV2.getPair(srcTokenReal, dstTokenReal);
+        if (exchange != IPancakeswapV2Exchange(0)) {
             uint256 srcTokenBalance = srcTokenReal.universalBalanceOf(address(exchange));
             uint256 dstTokenBalance = dstTokenReal.universalBalanceOf(address(exchange));
             for (uint i = 0; i < amounts.length; i++) {
-                rets[i] = _calculateUniswapFormula(srcTokenBalance, dstTokenBalance, amounts[i]);
+                rets[i] = _calculatePancakeswapFormula(srcTokenBalance, dstTokenBalance, amounts[i]);
             }
             return (rets, 50_000);
         }
@@ -659,7 +659,7 @@ contract OneSwap is IOneSwap, OneSwapRoot {
 
         function(IERC20,IERC20,uint256,uint256)[DEXES_COUNT] memory reserves = [
             _swapOnCurveY,
-            _swapOnUniswapV2
+            _swapOnPancakeswapV2
         ];
 
         require(distribution.length <= reserves.length, "OneSwap: Distribution array should not exceed reserves array size");
@@ -728,7 +728,7 @@ contract OneSwap is IOneSwap, OneSwapRoot {
         curveY.exchange_underlying(i - 1, j - 1, amount, 0);
     }
 
-    function _swapOnUniswapV2Internal(
+    function _swapOnPancakeswapV2Internal(
         IERC20 srcToken,
         IERC20 dstToken,
         uint256 amount,
@@ -740,7 +740,7 @@ contract OneSwap is IOneSwap, OneSwapRoot {
 
         IERC20 srcTokenReal = srcToken.isETH() ? weth : srcToken;
         IERC20 toTokenReal = dstToken.isETH() ? weth : dstToken;
-        IUniswapV2Exchange exchange = uniswapV2.getPair(srcTokenReal, toTokenReal);
+        IPancakeswapV2Exchange exchange = pancakeswapV2.getPair(srcTokenReal, toTokenReal);
         bool needSync;
         bool needSkim;
         (returnAmount, needSync, needSkim) = exchange.getReturn(srcTokenReal, toTokenReal, amount);
@@ -763,13 +763,13 @@ contract OneSwap is IOneSwap, OneSwapRoot {
         }
     }
 
-    function _swapOnUniswapV2(
+    function _swapOnPancakeswapV2(
         IERC20 srcToken,
         IERC20 dstToken,
         uint256 amount,
         uint256 flags
     ) internal {
-        _swapOnUniswapV2Internal(
+        _swapOnPancakeswapV2Internal(
             srcToken,
             dstToken,
             amount,
