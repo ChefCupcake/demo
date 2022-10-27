@@ -376,16 +376,16 @@ contract OneSwapView is IOneSwapView, OneSwapRoot {
         uint256[8] memory decimals;
 
         for (int128 i = 0; i < 4; i++) {
-            address _coin = curveHAY.coins(i);
+            address _coin = curve.coins(i);
             if (_coin != address(0)) {
                 uint j = uint(i);
-                balances[j] = IERC20(_coin).balanceOf(address(curveHAY));
+                balances[j] = IERC20(_coin).balanceOf(address(curve));
 
                 decimals[j] = ERC20Detailed(_coin).decimals();
             }
         }
-        amp = curveHAY.A();
-        fee = curveHAY.fee();
+        amp = curve.A();
+        fee = curve.fee();
 
         for (uint k = 0; k < 8 && balances[k] > 0; k++) {
             precisions[k] = 10 ** (18 - decimals[k]);
