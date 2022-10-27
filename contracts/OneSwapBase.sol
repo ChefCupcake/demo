@@ -3,6 +3,7 @@ pragma solidity ^0.5.0;
 
 import '@openzeppelin/contracts/math/SafeMath.sol';
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
+import '@openzeppelin/contracts/token/ERC20/ERC20Detailed.sol';
 import './interface/ICurve.sol';
 import './interface/IPancakeswapV2Factory.sol';
 import './IOneSwap.sol';
@@ -66,7 +67,7 @@ contract OneSwapRoot is IOneSwapView {
     IERC20 constant internal usdt = IERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
     IERC20 constant internal tusd = IERC20(0x0000000000085d4780B73119b644AE5ecd22b376);
 
-    ICurve constant internal curveY = ICurve(0x45F783CCE6B7FF23B2ab2D70e416cdb7D6055f51);
+    ICurve constant internal curveHAY = ICurve(0x45F783CCE6B7FF23B2ab2D70e416cdb7D6055f51);
     IPancakeswapV2Factory constant internal pancakeswapV2 = IPancakeswapV2Factory(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
     ICurveCalculator constant internal curveCalculator = ICurveCalculator(0xc1DB00a8E5Ef7bfa476395cdbcc98235477cDE4E);
     ICurveRegistry constant internal curveRegistry = ICurveRegistry(0x7002B727Ef8F5571Cb5F9D70D13DBEEb4dFAe9d1);
@@ -351,7 +352,7 @@ contract OneSwapView is IOneSwapView, OneSwapRoot {
     {
         bool invert = flags.check(FLAG_DISABLE_ALL_SPLIT_SOURCES);
         return [
-            invert != flags.check(FLAG_DISABLE_CURVE_ALL | FLAG_DISABLE_CURVE_Y)                        ? _calculateNoReturn : calculateCurveY,
+            invert != flags.check(FLAG_DISABLE_CURVE_ALL | FLAG_DISABLE_CURVE_Y)                        ? _calculateNoReturn : calculateCurveHAY,
             invert != flags.check(FLAG_DISABLE_PANCAKESWAP_V2_ALL | FLAG_DISABLE_PANCAKESWAP_V2)        ? _calculateNoReturn : calculatePancakeswapV2
         ];
     }
@@ -374,26 +375,17 @@ contract OneSwapView is IOneSwapView, OneSwapRoot {
     ) {
         uint256[8] memory decimals;
 
-        for (int8 i = 0; i < 8; i++) {
-            int128 a = 0; //int128(i);//0
-            address _coin = curve.coins(a);
-            uint j = uint(i);
-            balances[j] = IERC20(_coin).balanceOf(address(curve));
+        for (int128 i = 0; i < 4; i++) {
+            address _coin = curveHAY.coins(i);
+            if (_coin != address(0)) {
+                uint j = uint(i);
+                balances[j] = IERC20(_coin).balanceOf(address(curveHAY));
 
-            decimals[j] = 18;
+                decimals[j] = ERC20Detailed(_coin).decimals();
+            }
         }
-        amp = curve.A();
-        fee = curve.fee();
-
-//        (
-//            balances,
-//            /*underlying_balances*/,
-//            decimals,
-//            /*underlying_decimals*/,
-//            /*address lp_token*/,
-//            amp,
-//            fee
-//        ) = curveRegistry.get_pool_info(address(curve));
+        amp = curveHAY.A();
+        fee = curveHAY.fee();
 
         for (uint k = 0; k < 8 && balances[k] > 0; k++) {
             precisions[k] = 10 ** (18 - decimals[k]);
@@ -477,7 +469,7 @@ contract OneSwapView is IOneSwapView, OneSwapRoot {
         }
     }
 
-    function calculateCurveY(
+    function calculateCurveHAY(
         IERC20 srcToken,
         IERC20 dstToken,
         uint256 amount,
@@ -492,7 +484,7 @@ contract OneSwapView is IOneSwapView, OneSwapRoot {
             dstToken,
             amount,
             parts,
-            curveY,
+            curveHAY,
             true,
             tokens
         ), 1_400_000);
@@ -660,7 +652,7 @@ contract OneSwap is IOneSwap, OneSwapRoot {
         }
 
         function(IERC20,IERC20,uint256,uint256)[DEXES_COUNT] memory reserves = [
-            _swapOnCurveY,
+            _swapOnCurveHAY,
             _swapOnPancakeswapV2
         ];
 
@@ -708,7 +700,7 @@ contract OneSwap is IOneSwap, OneSwapRoot {
 
     // Swap helpers
 
-    function _swapOnCurveY(
+    function _swapOnCurveHAY(
         IERC20 srcToken,
         IERC20 dstToken,
         uint256 amount,
@@ -726,8 +718,8 @@ contract OneSwap is IOneSwap, OneSwapRoot {
             return;
         }
 
-        srcToken.universalApprove(address(curveY), amount);
-        curveY.exchange(i - 1, j - 1, amount, 0);
+        srcToken.universalApprove(address(curveHAY), amount);
+        curveHAY.exchange(i - 1, j - 1, amount, 0);
     }
 
     function _swapOnPancakeswapV2Internal(
