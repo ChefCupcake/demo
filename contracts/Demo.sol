@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.5.0;
 
-import './interface/ICurve.sol';
+import './interface/IStableSwap.sol';
 import './interface/IWETH.sol';
 import '@openzeppelin/contracts/math/SafeMath.sol';
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import '@openzeppelin/contracts/token/ERC20/ERC20Detailed.sol';
-import 'hardhat/console.sol';
 
 contract Demo {
     using SafeMath for uint256;
@@ -15,17 +14,14 @@ contract Demo {
     IERC20 constant internal ETH_ADDRESS = IERC20(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE);
     IERC20 constant internal ZERO_ADDRESS = IERC20(0);
 
-    IWETH constant internal weth = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-    IERC20 constant internal dai = IERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
-    IERC20 constant internal usdc = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
-    IERC20 constant internal usdt = IERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
-    IERC20 constant internal tusd = IERC20(0x0000000000085d4780B73119b644AE5ecd22b376);
+    IWETH constant internal weth = IWETH(0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c);
+    IERC20 constant internal busd = IERC20(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56);
+    IERC20 constant internal hay = IERC20(0x0782b6d8c4551B9760e74c0545a9bCD90bdc41E5);
 
-    ICurve constant internal curveHAY = ICurve(0x45F783CCE6B7FF23B2ab2D70e416cdb7D6055f51);
-    ICurveCalculator constant internal curveCalculator = ICurveCalculator(0xc1DB00a8E5Ef7bfa476395cdbcc98235477cDE4E);
-    ICurveRegistry constant internal curveRegistry = ICurveRegistry(0x7002B727Ef8F5571Cb5F9D70D13DBEEb4dFAe9d1);
+    IStableSwap constant internal stableswapHAY = IStableSwap(0x49079D07ef47449aF808A4f36c2a8dEC975594eC);
+    IStableSwapCalculator constant internal stableswapCalculator = IStableSwapCalculator(0x4b1bFb6f5E2B10770F08e2496E8d0CdB2e682798);
 
-    function getCurvePoolInfo(
+    function getStableSwapPoolInfo(
 
     ) external view returns (
         uint256[8] memory balances,
@@ -36,17 +32,16 @@ contract Demo {
     ) {
         uint256[8] memory decimals;
 
-        for (int128 i = 0; i < 4; i++) {
-            address _coin = curveHAY.coins(i);
+        for (uint i = 0; i < 2; i++) {
+            address _coin = stableswapHAY.coins(i);
             if (_coin != address(0)) {
-                uint j = uint(i);
-                balances[j] = IERC20(_coin).balanceOf(address(curveHAY));
+                balances[i] = IERC20(_coin).balanceOf(address(stableswapHAY));
 
-                decimals[j] = ERC20Detailed(_coin).decimals();
+                decimals[i] = ERC20Detailed(_coin).decimals();
             }
         }
-        amp = curveHAY.A();
-        fee = curveHAY.fee();
+        amp = stableswapHAY.A();
+        fee = stableswapHAY.fee();
 
 //        (
 //            balances,
@@ -58,7 +53,7 @@ contract Demo {
 //            fee
 //        ) = curveRegistry.get_pool_info(address(curveHAY));
 
-        for (uint k = 0; k < 8 && balances[k] > 0; k++) {
+        for (uint k = 0; k < 2 && balances[k] > 0; k++) {
             precisions[k] = 10 ** (18 - decimals[k]);
             rates[k] = 1e18;
         }

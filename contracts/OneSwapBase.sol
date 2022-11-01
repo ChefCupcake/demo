@@ -4,12 +4,11 @@ pragma solidity ^0.5.0;
 import '@openzeppelin/contracts/math/SafeMath.sol';
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import '@openzeppelin/contracts/token/ERC20/ERC20Detailed.sol';
-import './interface/ICurve.sol';
+import './interface/IStableSwap.sol';
 import './interface/IPancakeswapV2Factory.sol';
 import './IOneSwap.sol';
 import './interface/IWETH.sol';
 import './UniversalERC20.sol';
-import 'hardhat/console.sol';
 
 contract IOneSwapView is IOneSwapConsts {
     function getExpectedReturn(
@@ -61,16 +60,13 @@ contract OneSwapRoot is IOneSwapView {
     IERC20 constant internal ETH_ADDRESS = IERC20(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE);
     IERC20 constant internal ZERO_ADDRESS = IERC20(0);
 
-    IWETH constant internal weth = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-    IERC20 constant internal dai = IERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
-    IERC20 constant internal usdc = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
-    IERC20 constant internal usdt = IERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
-    IERC20 constant internal tusd = IERC20(0x0000000000085d4780B73119b644AE5ecd22b376);
+    IWETH constant internal weth = IWETH(0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c);
+    IERC20 constant internal busd = IERC20(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56);
+    IERC20 constant internal hay = IERC20(0x0782b6d8c4551B9760e74c0545a9bCD90bdc41E5);
 
-    ICurve constant internal curveHAY = ICurve(0x45F783CCE6B7FF23B2ab2D70e416cdb7D6055f51);
-    IPancakeswapV2Factory constant internal pancakeswapV2 = IPancakeswapV2Factory(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
-    ICurveCalculator constant internal curveCalculator = ICurveCalculator(0xc1DB00a8E5Ef7bfa476395cdbcc98235477cDE4E);
-    ICurveRegistry constant internal curveRegistry = ICurveRegistry(0x7002B727Ef8F5571Cb5F9D70D13DBEEb4dFAe9d1);
+    IStableSwap constant internal stableswapHAY = IStableSwap(0x49079D07ef47449aF808A4f36c2a8dEC975594eC);
+    IPancakeswapV2Factory constant internal pancakeswapV2 = IPancakeswapV2Factory(0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73);
+    IStableSwapCalculator constant internal stableswapCalculator = IStableSwapCalculator(0x4b1bFb6f5E2B10770F08e2496E8d0CdB2e682798);
 
     int256 internal constant VERY_NEGATIVE_VALUE = -1e72;
 
@@ -352,7 +348,7 @@ contract OneSwapView is IOneSwapView, OneSwapRoot {
     {
         bool invert = flags.check(FLAG_DISABLE_ALL_SPLIT_SOURCES);
         return [
-            invert != flags.check(FLAG_DISABLE_CURVE_ALL | FLAG_DISABLE_CURVE_Y)                        ? _calculateNoReturn : calculateCurveHAY,
+            invert != flags.check(FLAG_DISABLE_STABLESWAP_ALL | FLAG_DISABLE_STABLESWAP_HAY)            ? _calculateNoReturn : calculateStableSwapHAY,
             invert != flags.check(FLAG_DISABLE_PANCAKESWAP_V2_ALL | FLAG_DISABLE_PANCAKESWAP_V2)        ? _calculateNoReturn : calculatePancakeswapV2
         ];
     }
@@ -364,8 +360,8 @@ contract OneSwapView is IOneSwapView, OneSwapRoot {
         uint256 dst;
     }
 
-    function _getCurvePoolInfo(
-        ICurve curve
+    function _getStableSwapPoolInfo(
+        IStableSwap stableswap
     ) internal view returns (
         uint256[8] memory balances,
         uint256[8] memory precisions,
@@ -375,43 +371,42 @@ contract OneSwapView is IOneSwapView, OneSwapRoot {
     ) {
         uint256[8] memory decimals;
 
-        for (int128 i = 0; i < 4; i++) {
-            address _coin = curve.coins(i);
+        for (uint i = 0; i < 2; i++) {
+            address _coin = stableswap.coins(i);
             if (_coin != address(0)) {
-                uint j = uint(i);
-                balances[j] = IERC20(_coin).balanceOf(address(curve));
+                balances[i] = IERC20(_coin).balanceOf(address(stableswap));
 
-                decimals[j] = ERC20Detailed(_coin).decimals();
+                decimals[i] = ERC20Detailed(_coin).decimals();
             }
         }
-        amp = curve.A();
-        fee = curve.fee();
+        amp = stableswap.A();
+        fee = stableswap.fee();
 
-        for (uint k = 0; k < 8 && balances[k] > 0; k++) {
+        for (uint k = 0; k < 2 && balances[k] > 0; k++) {
             precisions[k] = 10 ** (18 - decimals[k]);
             rates[k] = 1e18;
         }
     }
 
-    function _calculateCurveSelector(
+    function _calculateStableSwapSelector(
         IERC20 srcToken,
         IERC20 dstToken,
         uint256 amount,
         uint256 parts,
-        ICurve curve,
+        IStableSwap stableswap,
         bool haveUnderlying,
         IERC20[] memory tokens
     ) internal view returns (uint256[] memory rets) {
         rets = new uint256[](parts);
 
-        int128 i = 0;
-        int128 j = 0;
+        uint i = 0;
+        uint j = 0;
         for (uint t = 0; t < tokens.length; t++) {
             if (srcToken == tokens[t]) {
-                i = int128(t + 1);
+                i = uint(t + 1);
             }
             if (dstToken == tokens[t]) {
-                j = int128(t + 1);
+                j = uint(t + 1);
             }
         }
 
@@ -432,13 +427,13 @@ contract OneSwapView is IOneSwapView, OneSwapRoot {
             uint256[8] memory rates,
             uint256 amp,
             uint256 fee
-        ) = _getCurvePoolInfo(curve);
+        ) = _getStableSwapPoolInfo(stableswap);
 
         bool success;
-        (success, data) = address(curveCalculator).staticcall(
+        (success, data) = address(stableswapCalculator).staticcall(
             abi.encodePacked(
 		abi.encodeWithSelector(
-	            curveCalculator.get_dy.selector,
+                stableswapCalculator.get_dy.selector,
 	            tokens.length,
 	            balances,
 	            amp,
@@ -469,22 +464,22 @@ contract OneSwapView is IOneSwapView, OneSwapRoot {
         }
     }
 
-    function calculateCurveHAY(
+    function calculateStableSwapHAY(
         IERC20 srcToken,
         IERC20 dstToken,
         uint256 amount,
         uint256 parts,
         uint256 /*flags*/
     ) internal view returns (uint256[] memory rets, uint256 gas) {
-        IERC20[] memory tokens = new IERC20[](4);
-        tokens[0] = dai;
-        tokens[1] = usdc;
-        return (_calculateCurveSelector(
+        IERC20[] memory tokens = new IERC20[](2);
+        tokens[0] = busd;
+        tokens[1] = hay;
+        return (_calculateStableSwapSelector(
             srcToken,
             dstToken,
             amount,
             parts,
-            curveHAY,
+            stableswapHAY,
             true,
             tokens
         ), 1_400_000);
@@ -652,7 +647,7 @@ contract OneSwap is IOneSwap, OneSwapRoot {
         }
 
         function(IERC20,IERC20,uint256,uint256)[DEXES_COUNT] memory reserves = [
-            _swapOnCurveHAY,
+            _swapOnStableSwapHAY,
             _swapOnPancakeswapV2
         ];
 
@@ -700,26 +695,22 @@ contract OneSwap is IOneSwap, OneSwapRoot {
 
     // Swap helpers
 
-    function _swapOnCurveHAY(
+    function _swapOnStableSwapHAY(
         IERC20 srcToken,
         IERC20 dstToken,
         uint256 amount,
         uint256 /*flags*/
     ) internal {
-        int128 i = (srcToken == dai ? 1 : 0) +
-            (srcToken == usdc ? 2 : 0) +
-            (srcToken == usdt ? 3 : 0) +
-            (srcToken == tusd ? 4 : 0);
-        int128 j = (dstToken == dai ? 1 : 0) +
-            (dstToken == usdc ? 2 : 0) +
-            (dstToken == usdt ? 3 : 0) +
-            (dstToken == tusd ? 4 : 0);
+        uint i = (srcToken == busd ? 1 : 0) +
+            (srcToken == hay ? 2 : 0);
+        uint j = (dstToken == busd ? 1 : 0) +
+            (dstToken == hay ? 2 : 0);
         if (i == 0 || j == 0) {
             return;
         }
 
-        srcToken.universalApprove(address(curveHAY), amount);
-        curveHAY.exchange(i - 1, j - 1, amount, 0);
+        srcToken.universalApprove(address(stableswapHAY), amount);
+        stableswapHAY.exchange(i - 1, j - 1, amount, 0);
     }
 
     function _swapOnPancakeswapV2Internal(
