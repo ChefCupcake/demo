@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.5.0;
+pragma solidity ^0.8.0;
 
-import "@openzeppelin-2.5.0/contracts/math/SafeMath.sol";
-import "@openzeppelin-2.5.0/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin-2.5.0/contracts/token/ERC20/SafeERC20.sol";
+import "@openzeppelin-4.5.0/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin-4.5.0/contracts/token/ERC20/utils/SafeERC20.sol";
 
 library UniversalERC20 {
-    using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
     IERC20 private constant ZERO_ADDRESS = IERC20(0x0000000000000000000000000000000000000000);
@@ -22,7 +20,7 @@ library UniversalERC20 {
         }
 
         if (isETH(token)) {
-            address(uint160(to)).transfer(amount);
+            payable(address(uint160(to))).transfer(amount);
         } else {
             token.safeTransfer(to, amount);
             return true;
@@ -42,10 +40,10 @@ library UniversalERC20 {
         if (isETH(token)) {
             require(from == msg.sender && msg.value >= amount, "Wrong useage of ETH.universalTransferFrom()");
             if (to != address(this)) {
-                address(uint160(to)).transfer(amount);
+                payable(address(uint160(to))).transfer(amount);
             }
             if (msg.value > amount) {
-                msg.sender.transfer(msg.value.sub(amount));
+                payable(msg.sender).transfer(msg.value - amount);
             }
         } else {
             token.safeTransferFrom(from, to, amount);
@@ -60,7 +58,7 @@ library UniversalERC20 {
         if (isETH(token)) {
             if (msg.value > amount) {
                 // Return remainder if exist
-                msg.sender.transfer(msg.value.sub(amount));
+                payable(msg.sender).transfer(msg.value - amount);
             }
         } else {
             token.safeTransferFrom(msg.sender, address(this), amount);
@@ -101,9 +99,9 @@ library UniversalERC20 {
             return 18;
         }
 
-        (bool success, bytes memory data) = address(token).staticcall.gas(10000)(abi.encodeWithSignature("decimals()"));
+        (bool success, bytes memory data) = address(token).staticcall{gas: 10000}(abi.encodeWithSignature("decimals()"));
         if (!success || data.length == 0) {
-            (success, data) = address(token).staticcall.gas(10000)(abi.encodeWithSignature("DECIMALS()"));
+            (success, data) = address(token).staticcall{gas: 10000}(abi.encodeWithSignature("DECIMALS()"));
         }
 
         return (success && data.length > 0) ? abi.decode(data, (uint256)) : 18;
@@ -115,9 +113,5 @@ library UniversalERC20 {
 
     function eq(IERC20 a, IERC20 b) internal pure returns (bool) {
         return a == b || (isETH(a) && isETH(b));
-    }
-
-    function notExist(IERC20 token) internal pure returns (bool) {
-        return (address(token) == address(-1));
     }
 }

@@ -1869,6 +1869,11 @@
   "resolved" "https://registry.npmjs.org/@openzeppelin/contracts/-/contracts-2.5.0.tgz"
   "version" "2.5.0"
 
+"@openzeppelin-4.5.0/contracts@npm:@openzeppelin/contracts@4.5.0":
+  "integrity" "sha512-fdkzKPYMjrRiPK6K4y64e6GzULR7R7RwxSigHS8DDp7aWDeoReqsQI+cxHV1UuhAqX69L1lAaWDxenfP+xiqzA=="
+  "resolved" "https://registry.npmjs.org/@openzeppelin/contracts/-/contracts-4.5.0.tgz"
+  "version" "4.5.0"
+
 "@openzeppelin/contract-loader@^0.6.2":
   "integrity" "sha1-Yae0TeMn5At9U/OeD7Wbv4RzNcM="
   "resolved" "https://registry.nlark.com/@openzeppelin/contract-loader/download/@openzeppelin/contract-loader-0.6.3.tgz"

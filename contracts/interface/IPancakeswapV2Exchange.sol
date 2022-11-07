@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.5.0;
+pragma solidity ^0.8.0;
 
-import "@openzeppelin-2.5.0/contracts/math/Math.sol";
-import "@openzeppelin-2.5.0/contracts/math/SafeMath.sol";
-import "@openzeppelin-2.5.0/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin-4.5.0/contracts/utils/math/Math.sol";
+import "@openzeppelin-4.5.0/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin-4.5.0/contracts/token/ERC20/IERC20.sol";
 import "../UniversalERC20.sol";
 
 interface IPancakeswapV2Exchange {
@@ -56,9 +56,9 @@ library PancakeswapV2ExchangeLib {
         needSync = (reserveIn < reserve0 || reserveOut < reserve1);
         needSkim = !needSync && (reserveIn > reserve0 || reserveOut > reserve1);
 
-        uint256 amountInWithFee = amountIn.mul(997);
+        uint256 amountInWithFee = amountIn.mul(9975);
         uint256 numerator = amountInWithFee.mul(Math.min(reserveOut, reserve1));
-        uint256 denominator = Math.min(reserveIn, reserve0).mul(1000).add(amountInWithFee);
+        uint256 denominator = Math.min(reserveIn, reserve0).mul(10000).add(amountInWithFee);
         result = (denominator == 0) ? 0 : numerator.div(denominator);
     }
 }
